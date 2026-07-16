@@ -1,0 +1,12 @@
+{
+  "include": ["app", "main.py"],
+  "pythonVersion": "3.11",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": ["."]
+    }
+  ],
+  "reportMissingImports": false,
+  "reportMissingTypeStubs": false
+}

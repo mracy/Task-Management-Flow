@@ -1,0 +1,24 @@
+FROM gradle:8.9-jdk17 AS builder
+
+WORKDIR /app
+COPY Backend/build.gradle Backend/settings.gradle Backend/gradle.properties ./
+COPY Backend/gradle ./gradle
+RUN gradle dependencies --no-daemon
+
+COPY Backend/src ./src
+RUN gradle bootJar --no-daemon
+
+FROM eclipse-temurin:17-jre-jammy
+
+WORKDIR /app
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/* \
+    && addgroup --system spring && adduser --system --ingroup spring spring
+COPY --from=builder /app/build/libs/*.jar app.jar
+USER spring:spring
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -f http://localhost:8080/actuator/health || exit 1
+
+ENTRYPOINT ["java", "-jar", "app.jar"]

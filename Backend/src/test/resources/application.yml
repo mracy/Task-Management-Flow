@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/task_management_test
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+jwt:
+  secret: dGFza21hbmFnZW1lbnRwbGF0Zm9ybXN1cGVyc2VjcmV0a2V5Zm9yand0dG9rZW5zMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkw
+  access-token-expiration: 900000
+  refresh-token-expiration: 604800000
+
+logging:
+  level:
+    root: WARN
+    com.taskmanagement: DEBUG

@@ -1,0 +1,142 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}/backend
+  FRONTEND_IMAGE: ${{ github.repository }}/frontend
+  AI_IMAGE: ${{ github.repository }}/ai-backend
+
+jobs:
+  # --- Backend ---
+  backend-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: taskmanagement_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Backend - Build & Test
+        working-directory: Backend
+        run: |
+          chmod +x gradlew 2>/dev/null || true
+          ./gradlew build test --no-daemon
+      - name: Backend - Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: Backend/build/reports/
+
+  backend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Backend - Static Analysis
+        working-directory: Backend
+        run: ./gradlew checkstyleMain --no-daemon || true
+
+  # --- Frontend ---
+  frontend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Frontend/package-lock.json
+      - name: Frontend - Install
+        working-directory: Frontend
+        run: npm ci
+      - name: Frontend - Type Check
+        working-directory: Frontend
+        run: npm run type-check
+      - name: Frontend - Build
+        working-directory: Frontend
+        run: npm run build
+
+  # --- Docker Build ---
+  docker-build:
+    needs: [backend-test, frontend-test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.backend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Frontend
+          file: docker/Dockerfile.frontend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
+      - name: Build & Push AI Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./AI-Backend
+          file: ./AI-Backend/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.AI_IMAGE }}:latest
+
+  # --- Deploy ---
+  deploy:
+    needs: [docker-build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f kubernetes/namespace.yaml
+          kubectl apply -f kubernetes/secrets.yaml
+          kubectl apply -f kubernetes/configmap.yaml
+          kubectl apply -f kubernetes/backend/
+          kubectl apply -f kubernetes/frontend/
+          kubectl apply -f kubernetes/ai-backend/
+          kubectl apply -f kubernetes/ingress.yaml
+          kubectl apply -f kubernetes/hpa.yaml
+          kubectl rollout status deployment/backend -n taskflow --timeout=120s
+          kubectl rollout status deployment/frontend -n taskflow --timeout=120s

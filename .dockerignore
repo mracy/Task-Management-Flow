@@ -1,0 +1,13 @@
+.git
+node_modules
+dist
+build
+.gradle
+__pycache__
+*.pyc
+.venv
+.env
+docker
+kubernetes
+docs
+*.md

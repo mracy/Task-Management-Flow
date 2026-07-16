@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: taskflow
+data:
+  SPRING_PROFILES_ACTIVE: "production"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/taskmanagement"
+  SPRING_REDIS_HOST: "redis"
+  SPRING_REDIS_PORT: "6379"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
+  AI_PROVIDER: "ollama"
+  OLLAMA_BASE_URL: "http://ollama:11434"
+  OLLAMA_MODEL: "llama3.1"
